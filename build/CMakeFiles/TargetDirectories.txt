@@ -1,0 +1,4 @@
+/home/yzc/trajectory_optimization/build/CMakeFiles/rebuild_cache.dir
+/home/yzc/trajectory_optimization/build/CMakeFiles/edit_cache.dir
+/home/yzc/trajectory_optimization/build/CMakeFiles/min_snap.dir
+/home/yzc/trajectory_optimization/build/CMakeFiles/hello.dir
