@@ -20,7 +20,10 @@ private:
     /* data */
 public:
     int dim = 2; // if 2: x, y; if 3: x, y, z
-    int wp_num = 5;
+    static const int wp_num = 5;
+    double time[wp_num];
+    double max_velocity = 10;
+    double total_time = 5;
     Eigen::MatrixXd path = Eigen::MatrixXd::Zero(dim, wp_num);
     
     // path.push_back(wp1);
@@ -33,7 +36,7 @@ public:
     ~min_snap();
     void solve_bAp();
     void solve_Nseg_bAp();
-    void time_arrange(std::vector<std::vector<double>> path_);
+    void uniform_time_arrange(Eigen::MatrixXd path_);
 };
 
 min_snap::min_snap(/* args */)
@@ -43,7 +46,8 @@ min_snap::min_snap(/* args */)
     path.col(2) = Eigen::Vector2d(2, -1);
     path.col(3) = Eigen::Vector2d(4, 8);
     path.col(4) = Eigen::Vector2d(5, 2);
-    solve_bAp();
+    uniform_time_arrange(path);
+    // solve_bAp();
     // std::cout << " path: " << std::endl << path << std::endl;
     // path.push_back(wp1);
     // path.push_back(wp2);
@@ -63,6 +67,7 @@ void min_snap::solve_Nseg_bAp()
     /* x(t) = pi * t^i + ... + p5 * t^5 + p4 * t^4 + p3 * t^3 + p2 * t^2 + p1 * t + p0
     for 5th order, i = 5, size of vector 7 is i + 1
     x = 0, 1, 2, 4, 5, so segments N = 4 */
+    int min_what = 5; // pos = 1, vel = 2, acc = 3, jerk = 4, snap = 5;
     Eigen::VectorXd x;
     x << 0, 1, 2, 4, 5;
     int N = x.size() - 1;
@@ -126,11 +131,28 @@ void min_snap::solve_bAp()
     std::cout << "v1 = " << v1 << std::endl;
 }
 
-void min_snap::time_arrange(std::vector<std::vector<double>> path_)
+void min_snap::uniform_time_arrange(Eigen::MatrixXd path_)
 {
-    for(int i; i < path_.size(); i++)
+    int point_num = path_.row(0).size();
+    std::cout << path_ << std::endl;
+    std::cout << point_num << std::endl;
+    int seg_num = point_num - 1;
+    double dist[seg_num], time[point_num], total_dist = 0;
+    time[0] = 0;
+    for(int i = 0; i < seg_num; i++)
     {
-
+        dist[i] = (path_.col(i + 1) - path_.col(i)).norm();
+        total_dist += dist[i];
+        std::cout << "dist: " << dist[i] << std::endl;
+    }
+    for(int i = 0; i < point_num; i++)
+    {
+        time[i + 1] = time[i] + dist[i] / total_dist * total_time;
+        
+    }
+    for(int i = 0; i < point_num; i++)
+    {
+        std::cout << "time: " << time[i] << std::endl;
     }
 }
 
