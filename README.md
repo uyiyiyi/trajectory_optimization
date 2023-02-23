@@ -8,3 +8,8 @@ https://blog.csdn.net/Travis_X/article/details/114435993#t5
 
 https://blog.csdn.net/q597967420/article/details/76099491
 
+https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=5980409
+
+https://github.com/zm0612/Minimum-Snap/blob/main/src/waypoint_trajectory_generator/src/trajectory_generator_node.cpp
+
+https://github.com/symao/minimum_snap_trajectory_generation
