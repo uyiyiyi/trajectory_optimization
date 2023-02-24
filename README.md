@@ -1,7 +1,15 @@
 # trajectory_optimization
 
 Install Eigen3 and OSQP-CPP first
+
+Eigen3: 
+
+sudo apt install libeigen3-dev
+
+OSQP:
+
 https://github.com/google/osqp-cpp
+
 
 Reference
 
