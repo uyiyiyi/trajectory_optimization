@@ -1,5 +1,8 @@
 # trajectory_optimization
 
+Install Eigen3 and OSQP-CPP first
+https://github.com/google/osqp-cpp
+
 Reference
 
 https://blog.csdn.net/u011341856/article/details/121861930
