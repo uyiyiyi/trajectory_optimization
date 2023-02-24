@@ -2,8 +2,11 @@
 #include <vector>
 #include <Eigen/Eigen>
 #include <Eigen/Dense>
-#include<Eigen/Core> 
-#include<Eigen/SVD>   
+#include <Eigen/Core> 
+#include <Eigen/SVD>
+#include "osqp.h"
+#include "Eigen/SparseCore"
+#include "osqp++.h"
 
 template<typename _Matrix_Type_> 
 _Matrix_Type_ pseudoInverse(const _Matrix_Type_ &a, double epsilon = 
@@ -47,6 +50,7 @@ min_snap::min_snap(/* args */)
     path.col(3) = Eigen::Vector2d(4, 8);
     path.col(4) = Eigen::Vector2d(5, 2);
     uniform_time_arrange(path);
+    solve_Nseg_bAp();
     // solve_bAp();
     // std::cout << " path: " << std::endl << path << std::endl;
     // path.push_back(wp1);
@@ -64,34 +68,33 @@ min_snap::~min_snap()
 
 void min_snap::solve_Nseg_bAp()
 {
-    /* x(t) = pi * t^i + ... + p5 * t^5 + p4 * t^4 + p3 * t^3 + p2 * t^2 + p1 * t + p0
-    for 5th order, i = 5, size of vector 7 is i + 1
-    x = 0, 1, 2, 4, 5, so segments N = 4 */
-    int min_what = 5; // pos = 1, vel = 2, acc = 3, jerk = 4, snap = 5;
-    Eigen::VectorXd x;
-    x << 0, 1, 2, 4, 5;
-    int N = x.size() - 1;
-    int order = 6;
-    double t0 = 0;
-    double t1 = 2;
-    Eigen::VectorXd b = Eigen::VectorXd::Zero(6); // Boundary condition: [x0, x1, v0, v1, a0, a1]
-    b(1) = 2;
-    b(3) = 1;
-    Eigen::VectorXd p(order + 1); // for order = 6, p(7)
-    Eigen::MatrixXd A(6, order + 1); // dimension is: (Boundary condition size: 6) * (order + 1))
-    
-    A.row(0) << pow(t0, 5), pow(t0, 4), pow(t0, 3), pow(t0, 2), t0, 1;
-    A.row(1) << pow(t1, 5), pow(t1, 4), pow(t1, 3), pow(t1, 2), t1, 1;
-    A.row(2) << 0, 0, 0, 0, 1, 0;
-    A.row(3) << 5 * pow(t1, 4), 4 * pow(t1, 3), 3 * pow(t1, 2), 2 * t1, 1, 0;
-    A.row(4) << 0, 0, 0, 2, 0, 0;
-    A.row(5) << 20 * pow(t1, 3), 12 * pow(t1, 2), 6 * t1, 2, 0, 0;
-    Eigen::FullPivLU<Eigen::MatrixXd> luA(A);
-    int rank = luA.rank();
-    std::cout << "Rank(A) = " << rank << std::endl;
-    std::cout << "A^-1 = " << std::endl << A.inverse() << std::endl;
-    p = A.inverse() * b;
-    std::cout << "p = [" << p.transpose() << ']' << std::endl;
+    // p(t) = p0 + p1 * t + p2 * t2 + ... + pn * tn = ∑ pi * ti
+    int derivative_order = 3; // pos = 0, vel = 1, acc = 2, jerk = 3, snap = 4;
+    int seg_num = path.row(0).size() - 1;
+    int p_order = 2 * derivative_order - 1; // Polynomial order, for jerk is 5, for snap is 7
+    int p_num = p_order + 1;
+    Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(p_num * seg_num, p_num * seg_num);
+    Eigen::MatrixXd Qi = Eigen::MatrixXd::Zero(p_num, p_num);
+    Eigen::VectorXd t = Eigen::VectorXd::Ones(p_num);
+    for(int seg = 0; seg < seg_num; seg++)
+    {
+        for(int i = 0; i < p_num; i++)
+        {
+            t(i) = 1;
+            for(int j = 0; j < derivative_order; j++)
+            {
+                int Ni = i - j;
+                if(Ni < 0)
+                    Ni = 0;
+                t(i) *= Ni;
+            }
+        }
+        Qi = t * t.transpose();
+        Q.block(seg * p_num, seg * p_num, p_num, p_num) = Qi;
+    }
+    // std::cout << t << std::endl;
+    // std::cout << Q << std::endl;
+
 }
 
 void min_snap::solve_bAp()
@@ -134,8 +137,8 @@ void min_snap::solve_bAp()
 void min_snap::uniform_time_arrange(Eigen::MatrixXd path_)
 {
     int point_num = path_.row(0).size();
-    std::cout << path_ << std::endl;
-    std::cout << point_num << std::endl;
+    // std::cout << path_ << std::endl;
+    // std::cout << point_num << std::endl;
     int seg_num = point_num - 1;
     double dist[seg_num], time[point_num], total_dist = 0;
     time[0] = 0;
@@ -143,22 +146,51 @@ void min_snap::uniform_time_arrange(Eigen::MatrixXd path_)
     {
         dist[i] = (path_.col(i + 1) - path_.col(i)).norm();
         total_dist += dist[i];
-        std::cout << "dist: " << dist[i] << std::endl;
+        // std::cout << "dist: " << dist[i] << std::endl;
     }
     for(int i = 0; i < point_num; i++)
     {
         time[i + 1] = time[i] + dist[i] / total_dist * total_time;
         
     }
-    for(int i = 0; i < point_num; i++)
-    {
-        std::cout << "time: " << time[i] << std::endl;
-    }
+    // for(int i = 0; i < point_num; i++)
+    // {
+    //     std::cout << "time: " << time[i] << std::endl;
+    // }
 }
 
 int main(int argc, const char** argv) {
-    // Eigen::Vector3d vec(1,2,3);
-    // cout << vec << endl;
-    min_snap ms;
+    // min_snap ms;
+    const double kInfinity = std::numeric_limits<double>::infinity();
+    SparseMatrix<double> objective_matrix(2, 2);
+    const Triplet<double> kTripletsP[] = {
+        {0, 0, 2.0}, {1, 0, 0.5}, {0, 1, 0.5}, {1, 1, 2.0}};
+    objective_matrix.setFromTriplets(std::begin(kTripletsP),
+                                    std::end(kTripletsP));
+
+    SparseMatrix<double> constraint_matrix(1, 2);
+    const Triplet<double> kTripletsA[] = {{0, 0, 1.0}};
+    constraint_matrix.setFromTriplets(std::begin(kTripletsA),
+                                        std::end(kTripletsA));
+
+    OsqpInstance instance;
+    instance.objective_matrix = objective_matrix;
+    instance.objective_vector.resize(2);
+    instance.objective_vector << 1.0, 0.0;
+    instance.constraint_matrix = constraint_matrix;
+    instance.lower_bounds.resize(1);
+    instance.lower_bounds << 1.0;
+    instance.upper_bounds.resize(1);
+    instance.upper_bounds << kInfinity;
+
+    OsqpSolver solver;
+    OsqpSettings settings;
+    // Edit settings if appropriate.
+    auto status = solver.Init(instance, settings);
+    // Assuming status.ok().
+    OsqpExitCode exit_code = solver.Solve();
+    // Assuming exit_code == OsqpExitCode::kOptimal.
+    double optimal_objective = solver.objective_value();
+    Eigen::VectorXd optimal_solution = solver.primal_solution();
     return 0;
 }
