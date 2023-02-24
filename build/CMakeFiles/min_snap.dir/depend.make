@@ -279,13 +279,4 @@ CMakeFiles/min_snap.dir/src/min_snap.cpp.o: /usr/include/eigen3/Eigen/src/plugin
 CMakeFiles/min_snap.dir/src/min_snap.cpp.o: /usr/include/eigen3/Eigen/src/plugins/CommonCwiseUnaryOps.h
 CMakeFiles/min_snap.dir/src/min_snap.cpp.o: /usr/include/eigen3/Eigen/src/plugins/MatrixCwiseBinaryOps.h
 CMakeFiles/min_snap.dir/src/min_snap.cpp.o: /usr/include/eigen3/Eigen/src/plugins/MatrixCwiseUnaryOps.h
-CMakeFiles/min_snap.dir/src/min_snap.cpp.o: /usr/local/include/osqp/constants.h
-CMakeFiles/min_snap.dir/src/min_snap.cpp.o: /usr/local/include/osqp/cs.h
-CMakeFiles/min_snap.dir/src/min_snap.cpp.o: /usr/local/include/osqp/glob_opts.h
-CMakeFiles/min_snap.dir/src/min_snap.cpp.o: /usr/local/include/osqp/lin_alg.h
-CMakeFiles/min_snap.dir/src/min_snap.cpp.o: /usr/local/include/osqp/osqp.h
-CMakeFiles/min_snap.dir/src/min_snap.cpp.o: /usr/local/include/osqp/osqp_configure.h
-CMakeFiles/min_snap.dir/src/min_snap.cpp.o: /usr/local/include/osqp/types.h
-CMakeFiles/min_snap.dir/src/min_snap.cpp.o: /usr/local/include/osqp/util.h
-CMakeFiles/min_snap.dir/src/min_snap.cpp.o: /usr/local/include/osqp/version.h
 
