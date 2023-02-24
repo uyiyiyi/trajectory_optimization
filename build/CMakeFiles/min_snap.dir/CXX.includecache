@@ -19,6 +19,8 @@ Eigen/Core
 -
 Eigen/SVD
 -
+OsqpEigen/OsqpEigen.h
+/home/yzc/trajectory_optimization/src/OsqpEigen/OsqpEigen.h
 
 /usr/include/eigen3/Eigen/Cholesky
 Core

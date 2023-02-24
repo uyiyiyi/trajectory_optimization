@@ -6,5 +6,5 @@ CXX_FLAGS = -O3 -DNDEBUG   -std=gnu++17
 
 CXX_DEFINES = 
 
-CXX_INCLUDES = -I/home/yzc/trajectory_optimization/include -I/usr/include/eigen3 -isystem /usr/local/include/osqp 
+CXX_INCLUDES = -I/home/yzc/trajectory_optimization/include -isystem /usr/include/eigen3 -isystem /usr/local/include/osqp 
 

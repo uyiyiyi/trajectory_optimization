@@ -4,9 +4,7 @@
 #include <Eigen/Dense>
 #include <Eigen/Core> 
 #include <Eigen/SVD>
-// #include "osqp.h"
-// #include "Eigen/SparseCore"
-// #include "osqp++.h"
+#include "OsqpEigen/OsqpEigen.h"
 
 template<typename _Matrix_Type_> 
 _Matrix_Type_ pseudoInverse(const _Matrix_Type_ &a, double epsilon = 
@@ -40,6 +38,7 @@ public:
     void solve_bAp();
     void solve_Nseg_bAp();
     void uniform_time_arrange(Eigen::MatrixXd path_);
+    int solveQP();
 };
 
 min_snap::min_snap(/* args */)
@@ -51,6 +50,7 @@ min_snap::min_snap(/* args */)
     path.col(4) = Eigen::Vector2d(5, 2);
     uniform_time_arrange(path);
     solve_Nseg_bAp();
+    solveQP();
     // solve_bAp();
     // std::cout << " path: " << std::endl << path << std::endl;
     // path.push_back(wp1);
@@ -159,38 +159,68 @@ void min_snap::uniform_time_arrange(Eigen::MatrixXd path_)
     // }
 }
 
+int min_snap::solveQP()
+{
+    // allocate QP problem matrices and vectores
+    Eigen::SparseMatrix<double> hessian(2, 2);      //P: n*n正定矩阵,必须为稀疏矩阵SparseMatrix
+    Eigen::VectorXd gradient(2);                    //Q: n*1向量
+    Eigen::SparseMatrix<double> linearMatrix(2, 2); //A: m*n矩阵,必须为稀疏矩阵SparseMatrix
+    Eigen::VectorXd lowerBound(2);                  //L: m*1下限向量
+    Eigen::VectorXd upperBound(2);                  //U: m*1上限向量
+
+    hessian.insert(0, 0) = 2.0; //注意稀疏矩阵的初始化方式,无法使用<<初始化
+    hessian.insert(1, 1) = 2.0;
+    // std::cout << "hessian:" << std::endl
+    //           << hessian << std::endl;
+    gradient << -2, -2;
+    linearMatrix.insert(0, 0) = 1.0; //注意稀疏矩阵的初始化方式,无法使用<<初始化
+    linearMatrix.insert(1, 1) = 1.0;
+    // std::cout << "linearMatrix:" << std::endl
+    //           << linearMatrix << std::endl;
+    lowerBound << 1, 1;
+    upperBound << 1.5, 1.5;
+
+    // instantiate the solver
+    OsqpEigen::Solver solver;
+
+    // settings
+    solver.settings()->setVerbosity(false);
+    solver.settings()->setWarmStart(true);
+
+    // set the initial data of the QP solver
+    solver.data()->setNumberOfVariables(2);   //变量数n
+    solver.data()->setNumberOfConstraints(2); //约束数m
+    if (!solver.data()->setHessianMatrix(hessian))
+        return 1;
+    if (!solver.data()->setGradient(gradient))
+        return 1;
+    if (!solver.data()->setLinearConstraintsMatrix(linearMatrix))
+        return 1;
+    if (!solver.data()->setLowerBound(lowerBound))
+        return 1;
+    if (!solver.data()->setUpperBound(upperBound))
+        return 1;
+
+    // instantiate the solver
+    if (!solver.initSolver())
+        return 1;
+
+    Eigen::VectorXd QPSolution;
+
+    solver.solveProblem();
+    // solve the QP problem
+    // if (!solver.solveProblem())
+    // {
+    //     return 1;
+    // }
+
+    QPSolution = solver.getSolution();
+    std::cout << "QPSolution" << std::endl
+              << QPSolution << std::endl; //输出为m*1的向量
+    return 0;
+}
+
 int main(int argc, const char** argv) {
     min_snap ms;
-    // const double kInfinity = std::numeric_limits<double>::infinity();
-    // SparseMatrix<double> objective_matrix(2, 2);
-    // const Triplet<double> kTripletsP[] = {
-    //     {0, 0, 2.0}, {1, 0, 0.5}, {0, 1, 0.5}, {1, 1, 2.0}};
-    // objective_matrix.setFromTriplets(std::begin(kTripletsP),
-    //                                 std::end(kTripletsP));
-
-    // SparseMatrix<double> constraint_matrix(1, 2);
-    // const Triplet<double> kTripletsA[] = {{0, 0, 1.0}};
-    // constraint_matrix.setFromTriplets(std::begin(kTripletsA),
-    //                                     std::end(kTripletsA));
-
-    // OsqpInstance instance;
-    // instance.objective_matrix = objective_matrix;
-    // instance.objective_vector.resize(2);
-    // instance.objective_vector << 1.0, 0.0;
-    // instance.constraint_matrix = constraint_matrix;
-    // instance.lower_bounds.resize(1);
-    // instance.lower_bounds << 1.0;
-    // instance.upper_bounds.resize(1);
-    // instance.upper_bounds << kInfinity;
-
-    // OsqpSolver solver;
-    // OsqpSettings settings;
-    // // Edit settings if appropriate.
-    // auto status = solver.Init(instance, settings);
-    // // Assuming status.ok().
-    // OsqpExitCode exit_code = solver.Solve();
-    // // Assuming exit_code == OsqpExitCode::kOptimal.
-    // double optimal_objective = solver.objective_value();
-    // Eigen::VectorXd optimal_solution = solver.primal_solution();
     return 0;
 }

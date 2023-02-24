@@ -9,7 +9,7 @@ set(CMAKE_BUILD_TYPE release)
 project(trajectory_optimization) 
 
 find_package(Eigen3 REQUIRED)
-find_package(osqp REQUIRED)
+find_package(OsqpEigen REQUIRED)
 
 
 # 设置一个名字var_name 的变量，同时给此变量赋值为var_value
@@ -33,8 +33,7 @@ add_executable(hello src/hello.cpp)
 add_executable(min_snap src/min_snap.cpp)
 
 # Link the OSQP shared library
-target_link_libraries(min_snap PRIVATE osqp::osqp)
-
+target_link_libraries(min_snap OsqpEigen::OsqpEigen)
 # or...
 # Link the OSQP static library
 # target_link_libraries(yourTarget PRIVATE osqp::osqpstatic)
