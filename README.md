@@ -1,6 +1,6 @@
 # trajectory_optimization
 
-Install Eigen3 and OSQP-CPP first
+Install Eigen3, OSQP and OSQP-Eigen first
 
 Eigen3: 
 
@@ -8,7 +8,9 @@ sudo apt install libeigen3-dev
 
 OSQP:
 
-https://github.com/google/osqp-cpp
+https://osqp.org/docs/get_started/C.html
+
+[https://github.com/google/osqp-cpp](https://github.com/robotology/osqp-eigen)
 
 
 Reference
