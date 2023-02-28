@@ -38,7 +38,7 @@ public:
     void solve_bAp();
     void solve_Nseg_bAp();
     void uniform_time_arrange(Eigen::MatrixXd path_);
-    int solveQP();
+    int solveQP(Eigen::MatrixXd Hessian);
 };
 
 min_snap::min_snap(/* args */)
@@ -50,7 +50,7 @@ min_snap::min_snap(/* args */)
     path.col(4) = Eigen::Vector2d(5, 2);
     uniform_time_arrange(path);
     solve_Nseg_bAp();
-    solveQP();
+
     // solve_bAp();
     // std::cout << " path: " << std::endl << path << std::endl;
     // path.push_back(wp1);
@@ -69,10 +69,11 @@ min_snap::~min_snap()
 void min_snap::solve_Nseg_bAp()
 {
     // p(t) = p0 + p1 * t + p2 * t2 + ... + pn * tn = ∑ pi * ti
-    int derivative_order = 3; // pos = 0, vel = 1, acc = 2, jerk = 3, snap = 4;
+    int derivative_order = 4; // pos = 0, vel = 1, acc = 2, jerk = 3, snap = 4;
     int seg_num = path.row(0).size() - 1;
     int p_order = 2 * derivative_order - 1; // Polynomial order, for jerk is 5, for snap is 7
     int p_num = p_order + 1;
+    int n = p_num * seg_num;
     Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(p_num * seg_num, p_num * seg_num);
     Eigen::MatrixXd Qi = Eigen::MatrixXd::Zero(p_num, p_num);
     Eigen::VectorXd t = Eigen::VectorXd::Ones(p_num);
@@ -91,9 +92,87 @@ void min_snap::solve_Nseg_bAp()
         }
         Qi = t * t.transpose();
         Q.block(seg * p_num, seg * p_num, p_num, p_num) = Qi;
-    }
+    } 
     // std::cout << t << std::endl;
     // std::cout << Q << std::endl;
+
+    Eigen::SparseMatrix<double> hessian(n, n);      //P: n*n正定矩阵,必须为稀疏矩阵SparseMatrix
+    hessian = Q.sparseView();
+    // std::cout << hessian << std::endl;
+    Eigen::VectorXd gradient = Eigen::VectorXd::Zero(n);                    //Q: n*1向量
+    Eigen::MatrixXd Aeq = Eigen::MatrixXd::Zero(4 * wp_num + 2, p_num * wp_num);
+    std::cout << p_num << ", " << wp_num << std::endl;
+    std::cout << Aeq.row(0).size() << "x" << Aeq.col(0).size() << std::endl;
+    Eigen::MatrixXd A = Eigen::MatrixXd::Zero(3, p_num);
+    Eigen::SparseMatrix<double> linearMatrix(4 * wp_num + 2, p_num * wp_num); //A: m*n矩阵,必须为稀疏矩阵SparseMatrix
+    Eigen::VectorXd lowerBound(2);                  //L: m*1下限向量
+    Eigen::VectorXd upperBound(2);                  //U: m*1上限向量
+    // 初始条件以及结束条件的限制（包含有位置，速度，加速度等）
+    for(int i = 0; i < wp_num; i++)
+    {
+        double t0 = time[i];
+        for(int n = 0; n < p_order; n++)
+        {
+            A(0, n) = pow(time[i], n);
+            if(n < 1)
+                A(1, 0) = 0;
+            else
+                A(1, n) = n * pow(time[i], n - 1);
+            if(n < 2)
+                A(2, n) = 0;
+            else
+                A(2, n) = n * (n - 1) * pow(time[i], n - 2);
+        }
+        Aeq.block(3 * i, p_num * i, 3, p_num) = A;
+    }
+    std::cout << Aeq.sparseView() << std::endl;
+
+    // 中间节点连续（包含有位置，速度，加速度）
+
+
+    hessian.insert(0, 0) = 2.0; //注意稀疏矩阵的初始化方式,无法使用<<初始化
+    hessian.insert(1, 1) = 2.0;
+    // std::cout << "hessian:" << std::endl
+    //           << hessian << std::endl;
+    gradient << -2, -2;
+    linearMatrix.insert(0, 0) = 1.0; //注意稀疏矩阵的初始化方式,无法使用<<初始化
+    linearMatrix.insert(1, 1) = 1.0;
+    // std::cout << "linearMatrix:" << std::endl
+    //           << linearMatrix << std::endl;
+    lowerBound << 1, 1;
+    upperBound << 1.5, 1.5;
+
+    // instantiate the solver
+    OsqpEigen::Solver solver;
+
+    // settings
+    solver.settings()->setVerbosity(false);
+    solver.settings()->setWarmStart(true);
+
+    // set the initial data of the QP solver
+    solver.data()->setNumberOfVariables(2);   //变量数n
+    solver.data()->setNumberOfConstraints(2); //约束数m
+    solver.data()->setHessianMatrix(hessian);
+    solver.data()->setGradient(gradient);
+    solver.data()->setLinearConstraintsMatrix(linearMatrix);
+    solver.data()->setLowerBound(lowerBound);
+    solver.data()->setUpperBound(upperBound);
+
+    // instantiate the solver
+    solver.initSolver();
+    Eigen::VectorXd QPSolution;
+
+    solver.solveProblem();
+    // solve the QP problem
+    // if (!solver.solveProblem())
+    // {
+    //     return 1;
+    // }
+
+    QPSolution = solver.getSolution();
+    std::cout << "QPSolution" << std::endl
+              << QPSolution << std::endl; //输出为m*1的向量
+    
 
 }
 
@@ -140,7 +219,7 @@ void min_snap::uniform_time_arrange(Eigen::MatrixXd path_)
     // std::cout << path_ << std::endl;
     // std::cout << point_num << std::endl;
     int seg_num = point_num - 1;
-    double dist[seg_num], time[point_num], total_dist = 0;
+    double dist[seg_num], total_dist = 0;
     time[0] = 0;
     for(int i = 0; i < seg_num; i++)
     {
@@ -159,64 +238,10 @@ void min_snap::uniform_time_arrange(Eigen::MatrixXd path_)
     // }
 }
 
-int min_snap::solveQP()
+int min_snap::solveQP(Eigen::MatrixXd Hessian)
 {
     // allocate QP problem matrices and vectores
-    Eigen::SparseMatrix<double> hessian(2, 2);      //P: n*n正定矩阵,必须为稀疏矩阵SparseMatrix
-    Eigen::VectorXd gradient(2);                    //Q: n*1向量
-    Eigen::SparseMatrix<double> linearMatrix(2, 2); //A: m*n矩阵,必须为稀疏矩阵SparseMatrix
-    Eigen::VectorXd lowerBound(2);                  //L: m*1下限向量
-    Eigen::VectorXd upperBound(2);                  //U: m*1上限向量
-
-    hessian.insert(0, 0) = 2.0; //注意稀疏矩阵的初始化方式,无法使用<<初始化
-    hessian.insert(1, 1) = 2.0;
-    // std::cout << "hessian:" << std::endl
-    //           << hessian << std::endl;
-    gradient << -2, -2;
-    linearMatrix.insert(0, 0) = 1.0; //注意稀疏矩阵的初始化方式,无法使用<<初始化
-    linearMatrix.insert(1, 1) = 1.0;
-    // std::cout << "linearMatrix:" << std::endl
-    //           << linearMatrix << std::endl;
-    lowerBound << 1, 1;
-    upperBound << 1.5, 1.5;
-
-    // instantiate the solver
-    OsqpEigen::Solver solver;
-
-    // settings
-    solver.settings()->setVerbosity(false);
-    solver.settings()->setWarmStart(true);
-
-    // set the initial data of the QP solver
-    solver.data()->setNumberOfVariables(2);   //变量数n
-    solver.data()->setNumberOfConstraints(2); //约束数m
-    if (!solver.data()->setHessianMatrix(hessian))
-        return 1;
-    if (!solver.data()->setGradient(gradient))
-        return 1;
-    if (!solver.data()->setLinearConstraintsMatrix(linearMatrix))
-        return 1;
-    if (!solver.data()->setLowerBound(lowerBound))
-        return 1;
-    if (!solver.data()->setUpperBound(upperBound))
-        return 1;
-
-    // instantiate the solver
-    if (!solver.initSolver())
-        return 1;
-
-    Eigen::VectorXd QPSolution;
-
-    solver.solveProblem();
-    // solve the QP problem
-    // if (!solver.solveProblem())
-    // {
-    //     return 1;
-    // }
-
-    QPSolution = solver.getSolution();
-    std::cout << "QPSolution" << std::endl
-              << QPSolution << std::endl; //输出为m*1的向量
+    
     return 0;
 }
 
