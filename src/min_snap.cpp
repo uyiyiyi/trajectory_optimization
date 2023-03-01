@@ -36,7 +36,7 @@ public:
     min_snap(/* args */);
     ~min_snap();
     void solve_bAp();
-    void solve_Nseg_bAp();
+    void solve_Nseg_bAp(int dim);
     void uniform_time_arrange(Eigen::MatrixXd path_);
     int solveQP(Eigen::MatrixXd Hessian);
 };
@@ -49,7 +49,8 @@ min_snap::min_snap(/* args */)
     path.col(3) = Eigen::Vector2d(4, 8);
     path.col(4) = Eigen::Vector2d(5, 2);
     uniform_time_arrange(path);
-    solve_Nseg_bAp();
+    solve_Nseg_bAp(0);
+    solve_Nseg_bAp(1);
 
     // solve_bAp();
     // std::cout << " path: " << std::endl << path << std::endl;
@@ -66,17 +67,20 @@ min_snap::~min_snap()
 {
 }
 
-void min_snap::solve_Nseg_bAp()
+void min_snap::solve_Nseg_bAp(int dim)
 {
     // p(t) = p0 + p1 * t + p2 * t2 + ... + pn * tn = ∑ pi * ti
-    int derivative_order = 4; // pos = 0, vel = 1, acc = 2, jerk = 3, snap = 4;
+    int derivative_order = 3; // pos = 0, vel = 1, acc = 2, jerk = 3, snap = 4;
     int seg_num = path.row(0).size() - 1;
     int p_order = 2 * derivative_order - 1; // Polynomial order, for jerk is 5, for snap is 7
     int p_num = p_order + 1;
+    int m = 2 * wp_num - 1;
     int n = p_num * seg_num;
     Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(p_num * seg_num, p_num * seg_num);
     Eigen::MatrixXd Qi = Eigen::MatrixXd::Zero(p_num, p_num);
     Eigen::VectorXd t = Eigen::VectorXd::Ones(p_num);
+    std::cout << "0" << std::endl;
+
     for(int seg = 0; seg < seg_num; seg++)
     {
         for(int i = 0; i < p_num; i++)
@@ -95,80 +99,113 @@ void min_snap::solve_Nseg_bAp()
     } 
     // std::cout << t << std::endl;
     // std::cout << Q << std::endl;
+    std::cout << "1" << std::endl;
+
 
     Eigen::SparseMatrix<double> hessian(n, n);      //P: n*n正定矩阵,必须为稀疏矩阵SparseMatrix
     hessian = Q.sparseView();
     // std::cout << hessian << std::endl;
     Eigen::VectorXd gradient = Eigen::VectorXd::Zero(n);                    //Q: n*1向量
-    Eigen::MatrixXd Aeq = Eigen::MatrixXd::Zero(4 * wp_num + 2, p_num * wp_num);
-    std::cout << p_num << ", " << wp_num << std::endl;
-    std::cout << Aeq.row(0).size() << "x" << Aeq.col(0).size() << std::endl;
-    Eigen::MatrixXd A = Eigen::MatrixXd::Zero(3, p_num);
-    Eigen::SparseMatrix<double> linearMatrix(4 * wp_num + 2, p_num * wp_num); //A: m*n矩阵,必须为稀疏矩阵SparseMatrix
-    Eigen::VectorXd lowerBound(2);                  //L: m*1下限向量
-    Eigen::VectorXd upperBound(2);                  //U: m*1上限向量
-    // 初始条件以及结束条件的限制（包含有位置，速度，加速度等）
-    for(int i = 0; i < wp_num; i++)
+    Eigen::SparseMatrix<double> linearMatrix(m, n); //A: m*n矩阵,必须为稀疏矩阵SparseMatrix
+    Eigen::VectorXd lowerBound(m);                  //L: m*1下限向量
+    Eigen::VectorXd upperBound(m);                  //U: m*1上限向量
+    
+    Eigen::MatrixXd Aeq = Eigen::MatrixXd::Zero(m, n);
+    Eigen::MatrixXd Ai = Eigen::MatrixXd::Zero(1, p_num);
+    Eigen::MatrixXd Ai_ = Eigen::MatrixXd::Zero(1, p_num);
+    for(int i = 0; i < m; i++)
     {
-        double t0 = time[i];
-        for(int n = 0; n < p_order; n++)
+        for(int j = 0; j < p_order; j++)
         {
-            A(0, n) = pow(time[i], n);
-            if(n < 1)
-                A(1, 0) = 0;
-            else
-                A(1, n) = n * pow(time[i], n - 1);
-            if(n < 2)
-                A(2, n) = 0;
-            else
-                A(2, n) = n * (n - 1) * pow(time[i], n - 2);
+            int index = i / 2;
+            Ai(0, j) = pow(time[index], j);
+            Ai_(0, j) = pow(time[index + 1], j);
         }
-        Aeq.block(3 * i, p_num * i, 3, p_num) = A;
+        if(i % 2 == 0)
+        {
+            Aeq.block(i, p_num * i / 2, 1, p_num) = Ai;
+            if(dim == 0)
+            {
+                lowerBound[i] = path.col(i / 2).x();
+                upperBound[i] = path.col(i / 2).x();
+            }
+            else if (dim == 1)
+            {
+                lowerBound[i] = path.col(i / 2).y();
+                upperBound[i] = path.col(i / 2).y();
+            }
+            else
+            {
+                lowerBound[i] = path.col(i / 2).z();
+                upperBound[i] = path.col(i / 2).z();
+            }
+        }
+        else
+        {
+            Aeq.block(i, p_num * (i - 1) / 2, 1, p_num) = Ai;
+            Aeq.block(i, p_num * (i + 1) / 2, 1, p_num) = -Ai_;
+            lowerBound[i] = 0;
+            upperBound[i] = 0;
+            // std::cout << Ai << std::endl;
+            // std::cout << Ai_ << std::endl;
+        }
     }
-    std::cout << Aeq.sparseView() << std::endl;
+    std::cout << "2" << std::endl;
+    std::cout << "m x n = " << m << " x " << n << std::endl;
+    std::cout << Aeq;
+    linearMatrix = Aeq.sparseView();
+    std::cout << "2.1" << std::endl;
+    std::cout << lowerBound << std::endl;
+    
+    // Eigen::MatrixXd Aeq = Eigen::MatrixXd::Zero(4 * wp_num + 2, p_num * wp_num);
+    // Eigen::MatrixXd A = Eigen::MatrixXd::Zero(3, p_num);
+    // // 初始条件以及结束条件的限制（包含有位置，速度，加速度等）
+    // for(int i = 0; i < wp_num; i++)
+    // {
+    //     double t0 = time[i];
+    //     for(int n = 0; n < p_order; n++)
+    //     {
+    //         A(0, n) = pow(time[i], n);
+    //         if(n < 1)
+    //             A(1, 0) = 0;
+    //         else
+    //             A(1, n) = n * pow(time[i], n - 1);
+    //         if(n < 2)
+    //             A(2, n) = 0;
+    //         else
+    //             A(2, n) = n * (n - 1) * pow(time[i], n - 2);
+    //     }
+    //     Aeq.block(3 * i, p_num * i, 3, p_num) = A;
+    // }
+    // std::cout << Aeq.sparseView() << std::endl;
 
     // 中间节点连续（包含有位置，速度，加速度）
 
-
-    hessian.insert(0, 0) = 2.0; //注意稀疏矩阵的初始化方式,无法使用<<初始化
-    hessian.insert(1, 1) = 2.0;
-    // std::cout << "hessian:" << std::endl
-    //           << hessian << std::endl;
-    gradient << -2, -2;
-    linearMatrix.insert(0, 0) = 1.0; //注意稀疏矩阵的初始化方式,无法使用<<初始化
-    linearMatrix.insert(1, 1) = 1.0;
-    // std::cout << "linearMatrix:" << std::endl
-    //           << linearMatrix << std::endl;
-    lowerBound << 1, 1;
-    upperBound << 1.5, 1.5;
-
     // instantiate the solver
     OsqpEigen::Solver solver;
-
+    std::cout << "2.2" << std::endl;
     // settings
     solver.settings()->setVerbosity(false);
     solver.settings()->setWarmStart(true);
 
     // set the initial data of the QP solver
-    solver.data()->setNumberOfVariables(2);   //变量数n
-    solver.data()->setNumberOfConstraints(2); //约束数m
+    solver.data()->setNumberOfVariables(n);   //变量数n
+    solver.data()->setNumberOfConstraints(m); //约束数m
     solver.data()->setHessianMatrix(hessian);
     solver.data()->setGradient(gradient);
     solver.data()->setLinearConstraintsMatrix(linearMatrix);
     solver.data()->setLowerBound(lowerBound);
     solver.data()->setUpperBound(upperBound);
+    std::cout << "3" << std::endl;
 
     // instantiate the solver
     solver.initSolver();
     Eigen::VectorXd QPSolution;
 
-    solver.solveProblem();
     // solve the QP problem
-    // if (!solver.solveProblem())
-    // {
-    //     return 1;
-    // }
-
+    OsqpEigen::ErrorExitFlag err_flag = solver.solveProblem();
+  
+    // std::cout << "err_flag = " << err_flag << std::endl;
     QPSolution = solver.getSolution();
     std::cout << "QPSolution" << std::endl
               << QPSolution << std::endl; //输出为m*1的向量
