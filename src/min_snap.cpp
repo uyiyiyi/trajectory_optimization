@@ -98,7 +98,7 @@ void min_snap::solve_Nseg_bAp(int dim)
         Q.block(seg * p_num, seg * p_num, p_num, p_num) = Qi;
     } 
     // std::cout << t << std::endl;
-    // std::cout << Q << std::endl;
+    std::cout << Q << std::endl;
     std::cout << "1" << std::endl;
 
 
