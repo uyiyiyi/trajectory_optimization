@@ -12,6 +12,10 @@ https://osqp.org/docs/get_started/C.html
 
 [https://github.com/google/osqp-cpp](https://github.com/robotology/osqp-eigen)
 
+OSQP-Eigen tutorial
+
+https://www.chuxin911.com/osqp-introduction_20210715/
+
 
 Reference
 
