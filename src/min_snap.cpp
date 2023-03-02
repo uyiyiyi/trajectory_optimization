@@ -79,8 +79,12 @@ void min_snap::solve_Nseg_bAp(int dim)
     Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(p_num * seg_num, p_num * seg_num);
     Eigen::MatrixXd Qi = Eigen::MatrixXd::Zero(p_num, p_num);
     Eigen::VectorXd t = Eigen::VectorXd::Ones(p_num);
-    std::cout << "0" << std::endl;
-
+    Eigen::VectorXd vec = Eigen::VectorXd::Ones(p_num);
+    for(int i = 0; i < wp_num; i++)
+    {
+        std::cout << time[i] << std::endl;
+    }
+    
     for(int seg = 0; seg < seg_num; seg++)
     {
         for(int i = 0; i < p_num; i++)
@@ -93,18 +97,20 @@ void min_snap::solve_Nseg_bAp(int dim)
                     Ni = 0;
                 t(i) *= Ni;
             }
+
+            if(i > derivative_order)
+                vec(i) = pow(time[seg + 1] - time[seg], i - derivative_order);
         }
-        Qi = t * t.transpose();
+        std::cout << vec << std::endl;
+        Qi = vec.cwiseProduct(t) * t.transpose();
         Q.block(seg * p_num, seg * p_num, p_num, p_num) = Qi;
     } 
     // std::cout << t << std::endl;
-    std::cout << Q << std::endl;
-    std::cout << "1" << std::endl;
-
+    // std::cout << Q << std::endl;
 
     Eigen::SparseMatrix<double> hessian(n, n);      //P: n*n正定矩阵,必须为稀疏矩阵SparseMatrix
     hessian = Q.sparseView();
-    // std::cout << hessian << std::endl;
+    std::cout << hessian << std::endl;
     Eigen::VectorXd gradient = Eigen::VectorXd::Zero(n);                    //Q: n*1向量
     Eigen::SparseMatrix<double> linearMatrix(m, n); //A: m*n矩阵,必须为稀疏矩阵SparseMatrix
     Eigen::VectorXd lowerBound(m);                  //L: m*1下限向量
