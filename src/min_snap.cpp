@@ -5,6 +5,7 @@
 #include <Eigen/Core> 
 #include <Eigen/SVD>
 #include "OsqpEigen/OsqpEigen.h"
+#include <stdexcept> 
 
 template<typename _Matrix_Type_> 
 _Matrix_Type_ pseudoInverse(const _Matrix_Type_ &a, double epsilon = 
@@ -14,6 +15,18 @@ _Matrix_Type_ pseudoInverse(const _Matrix_Type_ &a, double epsilon =
     double tolerance = epsilon * std::max(a.cols(), a.rows()) *svd.singularValues().array().abs()(0);  
     return svd.matrixV() *  (svd.singularValues().array().abs() > tolerance).select(svd.singularValues().array().inverse(), 0).matrix().asDiagonal() * svd.matrixU().adjoint(); 
 }   
+
+int factorial(int n)    
+{    
+    if(n<0)    
+        return(-1); /*Wrong value*/      
+    if(n==0)    
+        return(1);  /*Terminating condition*/    
+    else    
+    {    
+        return(n*factorial(n-1));        
+    }    
+}
 
 class min_snap
 {
@@ -26,7 +39,7 @@ public:
     double max_velocity = 10;
     double total_time = 5;
     Eigen::MatrixXd path = Eigen::MatrixXd::Zero(dim, wp_num);
-    
+    Eigen::VectorXd Solution_x, Solution_y, Solution_z;
     // path.push_back(wp1);
     double v0[2] = {0, 0};
     double a0[2] = {0, 0};
@@ -36,7 +49,7 @@ public:
     min_snap(/* args */);
     ~min_snap();
     void solve_bAp();
-    void solve_Nseg_bAp(int dim);
+    void solve_Nseg_bAp();
     void uniform_time_arrange(Eigen::MatrixXd path_);
     int solveQP(Eigen::MatrixXd Hessian);
 };
@@ -49,8 +62,7 @@ min_snap::min_snap(/* args */)
     path.col(3) = Eigen::Vector2d(4, 8);
     path.col(4) = Eigen::Vector2d(5, 2);
     uniform_time_arrange(path);
-    solve_Nseg_bAp(0);
-    solve_Nseg_bAp(1);
+    solve_Nseg_bAp();
 
     // solve_bAp();
     // std::cout << " path: " << std::endl << path << std::endl;
@@ -67,129 +79,83 @@ min_snap::~min_snap()
 {
 }
 
-void min_snap::solve_Nseg_bAp(int dim)
+void min_snap::solve_Nseg_bAp()
 {
     // p(t) = p0 + p1 * t + p2 * t2 + ... + pn * tn = ∑ pi * ti
     int derivative_order = 3; // pos = 0, vel = 1, acc = 2, jerk = 3, snap = 4;
     int seg_num = path.row(0).size() - 1;
     int p_order = 2 * derivative_order - 1; // Polynomial order, for jerk is 5, for snap is 7
     int p_num = p_order + 1;
-    int m = 2 * wp_num - 1;
+    int m = 2 * wp_num - 2;
     int n = p_num * seg_num;
     Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(p_num * seg_num, p_num * seg_num);
     Eigen::MatrixXd Qi = Eigen::MatrixXd::Zero(p_num, p_num);
     Eigen::VectorXd t = Eigen::VectorXd::Ones(p_num);
-    Eigen::VectorXd vec = Eigen::VectorXd::Ones(p_num);
-    for(int i = 0; i < wp_num; i++)
-    {
-        std::cout << time[i] << std::endl;
-    }
-    
+
     for(int seg = 0; seg < seg_num; seg++)
     {
-        for(int i = 0; i < p_num; i++)
+        for (int i = derivative_order; i < p_num; i++)
         {
-            t(i) = 1;
-            for(int j = 0; j < derivative_order; j++)
+            for (int j = derivative_order; j < p_num; j++)
             {
-                int Ni = i - j;
-                if(Ni < 0)
-                    Ni = 0;
-                t(i) *= Ni;
+                // Qi(i, j) = (factorial(i + 1) * factorial(j + 1) * pow(time[seg + 1] - time[seg], i + j + 3 - 2 * derivative_order)) / (factorial(i + 1 - derivative_order) * factorial(j + 1 - derivative_order) * (i + j + 3 - 2 * derivative_order));
+                Qi(i, j) = (factorial(i + 1) * factorial(j + 1) * (pow(time[seg + 1], i + j + 3 - 2 * derivative_order) - pow(time[seg], i + j + 3 - 2 * derivative_order))) / (factorial(i + 1 - derivative_order) * factorial(j + 1 - derivative_order) * (i + j + 3 - 2 * derivative_order));
             }
-
-            if(i > derivative_order)
-                vec(i) = pow(time[seg + 1] - time[seg], i - derivative_order);
         }
-        std::cout << vec << std::endl;
-        Qi = vec.cwiseProduct(t) * t.transpose();
         Q.block(seg * p_num, seg * p_num, p_num, p_num) = Qi;
-    } 
-    // std::cout << t << std::endl;
-    // std::cout << Q << std::endl;
+    }
 
     Eigen::SparseMatrix<double> hessian(n, n);      //P: n*n正定矩阵,必须为稀疏矩阵SparseMatrix
     hessian = Q.sparseView();
-    std::cout << hessian << std::endl;
+    // std::cout << hessian << std::endl;
+    
+    // Eigen::LLT<Eigen::MatrixXd> lltOfA(Q); // compute the Cholesky decomposition of A 
+    // std::cout << lltOfA.info() << std::endl;
+    // if(lltOfA.info() == Eigen::NumericalIssue) 
+    // { 
+    //     throw std::runtime_error("Possibly non semi-positive definitie matrix!"); 
+    // }
+
+    
     Eigen::VectorXd gradient = Eigen::VectorXd::Zero(n);                    //Q: n*1向量
     Eigen::SparseMatrix<double> linearMatrix(m, n); //A: m*n矩阵,必须为稀疏矩阵SparseMatrix
-    Eigen::VectorXd lowerBound(m);                  //L: m*1下限向量
-    Eigen::VectorXd upperBound(m);                  //U: m*1上限向量
+    Eigen::VectorXd lowerBound_x(m), lowerBound_y(m), lowerBound_z(m);                  //L: m*1下限向量
+    Eigen::VectorXd upperBound_x(m), upperBound_y(m), upperBound_z(m);                  //U: m*1上限向量
     
     Eigen::MatrixXd Aeq = Eigen::MatrixXd::Zero(m, n);
     Eigen::MatrixXd Ai = Eigen::MatrixXd::Zero(1, p_num);
     Eigen::MatrixXd Ai_ = Eigen::MatrixXd::Zero(1, p_num);
-    for(int i = 0; i < m; i++)
+    std::cout << "0" << std::endl;
+    for(int i = 0; i < seg_num; i++)
     {
-        for(int j = 0; j < p_order; j++)
+        for(int j = 0; j < p_num; j++)
         {
-            int index = i / 2;
-            Ai(0, j) = pow(time[index], j);
-            Ai_(0, j) = pow(time[index + 1], j);
+            Ai(0, j) = pow(time[i], j);
+            Ai_(0, j) = pow(time[i + 1], j);
         }
-        if(i % 2 == 0)
-        {
-            Aeq.block(i, p_num * i / 2, 1, p_num) = Ai;
-            if(dim == 0)
-            {
-                lowerBound[i] = path.col(i / 2).x();
-                upperBound[i] = path.col(i / 2).x();
-            }
-            else if (dim == 1)
-            {
-                lowerBound[i] = path.col(i / 2).y();
-                upperBound[i] = path.col(i / 2).y();
-            }
-            else
-            {
-                lowerBound[i] = path.col(i / 2).z();
-                upperBound[i] = path.col(i / 2).z();
-            }
-        }
-        else
-        {
-            Aeq.block(i, p_num * (i - 1) / 2, 1, p_num) = Ai;
-            Aeq.block(i, p_num * (i + 1) / 2, 1, p_num) = -Ai_;
-            lowerBound[i] = 0;
-            upperBound[i] = 0;
-            // std::cout << Ai << std::endl;
-            // std::cout << Ai_ << std::endl;
-        }
+        Aeq.block(2 * i, p_num * i, 1, p_num) = Ai;
+        Aeq.block(2 * i + 1, p_num * i, 1, p_num) = Ai_;
+        lowerBound_x[2 * i] = path.col(i).x();
+        upperBound_x[2 * i] = path.col(i).x();
+        lowerBound_x[2 * i + 1] = path.col(i + 1).x();
+        upperBound_x[2 * i + 1] = path.col(i + 1).x();
+        lowerBound_y[2 * i] = path.col(i).y();
+        upperBound_y[2 * i] = path.col(i).y();
+        lowerBound_y[2 * i + 1] = path.col(i + 1).y();
+        upperBound_y[2 * i + 1] = path.col(i + 1).y();
+        // lowerBound_z[2 * i] = path.col(i).z();
+        // upperBound_z[2 * i] = path.col(i).z();
+        // lowerBound_z[2 * i + 1] = path.col(i + 1).z();
+        // upperBound_z[2 * i + 1] = path.col(i + 1).z();
     }
-    std::cout << "2" << std::endl;
-    std::cout << "m x n = " << m << " x " << n << std::endl;
-    std::cout << Aeq;
+    std::cout << "1" << std::endl;
+    // std::cout << Aeq << std::endl;
     linearMatrix = Aeq.sparseView();
-    std::cout << "2.1" << std::endl;
-    std::cout << lowerBound << std::endl;
-    
-    // Eigen::MatrixXd Aeq = Eigen::MatrixXd::Zero(4 * wp_num + 2, p_num * wp_num);
-    // Eigen::MatrixXd A = Eigen::MatrixXd::Zero(3, p_num);
-    // // 初始条件以及结束条件的限制（包含有位置，速度，加速度等）
-    // for(int i = 0; i < wp_num; i++)
-    // {
-    //     double t0 = time[i];
-    //     for(int n = 0; n < p_order; n++)
-    //     {
-    //         A(0, n) = pow(time[i], n);
-    //         if(n < 1)
-    //             A(1, 0) = 0;
-    //         else
-    //             A(1, n) = n * pow(time[i], n - 1);
-    //         if(n < 2)
-    //             A(2, n) = 0;
-    //         else
-    //             A(2, n) = n * (n - 1) * pow(time[i], n - 2);
-    //     }
-    //     Aeq.block(3 * i, p_num * i, 3, p_num) = A;
-    // }
-    // std::cout << Aeq.sparseView() << std::endl;
-
-    // 中间节点连续（包含有位置，速度，加速度）
+    std::cout << linearMatrix << std::endl;
+    std::cout << lowerBound_x << std::endl;
 
     // instantiate the solver
     OsqpEigen::Solver solver;
-    std::cout << "2.2" << std::endl;
     // settings
     solver.settings()->setVerbosity(false);
     solver.settings()->setWarmStart(true);
@@ -200,23 +166,32 @@ void min_snap::solve_Nseg_bAp(int dim)
     solver.data()->setHessianMatrix(hessian);
     solver.data()->setGradient(gradient);
     solver.data()->setLinearConstraintsMatrix(linearMatrix);
-    solver.data()->setLowerBound(lowerBound);
-    solver.data()->setUpperBound(upperBound);
-    std::cout << "3" << std::endl;
+    solver.data()->setLowerBound(lowerBound_x);
+    solver.data()->setUpperBound(upperBound_x);
 
     // instantiate the solver
     solver.initSolver();
-    Eigen::VectorXd QPSolution;
-
-    // solve the QP problem
-    OsqpEigen::ErrorExitFlag err_flag = solver.solveProblem();
-  
-    // std::cout << "err_flag = " << err_flag << std::endl;
-    QPSolution = solver.getSolution();
-    std::cout << "QPSolution" << std::endl
-              << QPSolution << std::endl; //输出为m*1的向量
     
 
+    // solve the QP problem
+    solver.solveProblem();
+    Solution_x = solver.getSolution();
+    std::cout << "QPSolution_x" << std::endl
+              << Solution_x << std::endl;
+
+    solver.data()->setLowerBound(lowerBound_y);
+    solver.data()->setUpperBound(upperBound_y);
+    solver.solveProblem();
+    Solution_y = solver.getSolution();
+    std::cout << "QPSolution_y" << std::endl
+              << Solution_y << std::endl;
+
+    // solver.data()->setLowerBound(lowerBound_z);
+    // solver.data()->setUpperBound(upperBound_z);
+    // solver.solveProblem();
+    // Solution_y = solver.getSolution();
+    // std::cout << "QPSolution_z" << std::endl
+    //           << Solution_z << std::endl;
 }
 
 void min_snap::solve_bAp()
