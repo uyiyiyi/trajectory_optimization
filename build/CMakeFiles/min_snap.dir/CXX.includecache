@@ -23,6 +23,8 @@ OsqpEigen/OsqpEigen.h
 /home/yzc/trajectory_optimization/src/OsqpEigen/OsqpEigen.h
 stdexcept
 -
+ros/ros.h
+/home/yzc/trajectory_optimization/src/ros/ros.h
 
 /usr/include/eigen3/Eigen/Cholesky
 Core

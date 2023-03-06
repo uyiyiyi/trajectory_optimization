@@ -6,3 +6,7 @@
 
 #IncludeRegexTransform: 
 
+/home/yzc/trajectory_optimization/src/hello.cpp
+iostream
+-
+

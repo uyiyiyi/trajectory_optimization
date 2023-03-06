@@ -5,7 +5,7 @@
 #include <Eigen/Core> 
 #include <Eigen/SVD>
 #include "OsqpEigen/OsqpEigen.h"
-#include <stdexcept> 
+#include <stdexcept>
 
 template<typename _Matrix_Type_> 
 _Matrix_Type_ pseudoInverse(const _Matrix_Type_ &a, double epsilon = 
@@ -18,9 +18,9 @@ _Matrix_Type_ pseudoInverse(const _Matrix_Type_ &a, double epsilon =
 
 int factorial(int n)    
 {    
-    if(n<0)    
+    if(n < 0)    
         return(-1); /*Wrong value*/      
-    if(n==0)    
+    if(n == 0)    
         return(1);  /*Terminating condition*/    
     else    
     {    
@@ -86,7 +86,7 @@ void min_snap::solve_Nseg_bAp()
     int seg_num = path.row(0).size() - 1;
     int p_order = 2 * derivative_order - 1; // Polynomial order, for jerk is 5, for snap is 7
     int p_num = p_order + 1;
-    int m = 2 * wp_num - 2;
+    int m = 4 * wp_num - 2;
     int n = p_num * seg_num;
     Eigen::MatrixXd Q = Eigen::MatrixXd::Zero(p_num * seg_num, p_num * seg_num);
     Eigen::MatrixXd Qi = Eigen::MatrixXd::Zero(p_num, p_num);
@@ -125,13 +125,13 @@ void min_snap::solve_Nseg_bAp()
     Eigen::MatrixXd Aeq = Eigen::MatrixXd::Zero(m, n);
     Eigen::MatrixXd Ai = Eigen::MatrixXd::Zero(1, p_num);
     Eigen::MatrixXd Ai_ = Eigen::MatrixXd::Zero(1, p_num);
-    std::cout << "0" << std::endl;
     for(int i = 0; i < seg_num; i++)
     {
         for(int j = 0; j < p_num; j++)
         {
             Ai(0, j) = pow(time[i], j);
             Ai_(0, j) = pow(time[i + 1], j);
+            
         }
         Aeq.block(2 * i, p_num * i, 1, p_num) = Ai;
         Aeq.block(2 * i + 1, p_num * i, 1, p_num) = Ai_;
@@ -139,20 +139,126 @@ void min_snap::solve_Nseg_bAp()
         upperBound_x[2 * i] = path.col(i).x();
         lowerBound_x[2 * i + 1] = path.col(i + 1).x();
         upperBound_x[2 * i + 1] = path.col(i + 1).x();
+        
         lowerBound_y[2 * i] = path.col(i).y();
         upperBound_y[2 * i] = path.col(i).y();
         lowerBound_y[2 * i + 1] = path.col(i + 1).y();
         upperBound_y[2 * i + 1] = path.col(i + 1).y();
+        
         // lowerBound_z[2 * i] = path.col(i).z();
         // upperBound_z[2 * i] = path.col(i).z();
         // lowerBound_z[2 * i + 1] = path.col(i + 1).z();
         // upperBound_z[2 * i + 1] = path.col(i + 1).z();
+        
     }
-    std::cout << "1" << std::endl;
+    Eigen::MatrixXd Veli = Eigen::MatrixXd::Zero(1, 2 * p_num);
+    Eigen::MatrixXd Acci = Eigen::MatrixXd::Zero(1, 2 * p_num);
+    for(int i = 0; i < wp_num; i++)
+    {
+        // std::cout << "wp_num = " << wp_num << std::endl;
+        for (int j = 0; j < p_num; j++)
+        {
+            if(j == 0)
+            {
+                Veli(0, j) = 0;
+                Veli(0, j + p_num) = 0;
+            }
+            else
+            {
+                Veli(0, j) = j * pow(time[i], j - 1);
+                Veli(0, j + p_num) = -j * pow(time[i], j - 1);
+                if(i == 0)
+                {
+                    Veli(0, j) = j * pow(time[i], j - 1);
+                    Veli(0, j + p_num) = 0;
+                }
+                if(i == wp_num - 1)
+                {
+                    Veli(0, j) = 0;
+                    Veli(0, j + p_num) = j * pow(time[i], j - 1);
+                }
+            }
+            if(j == 0 || j == 1)
+            {
+                Acci(0, j) = 0;
+                Acci(0, j + p_num) = 0;
+            }
+            else
+            {
+                Acci(0, j) = j * (j - 1) * pow(time[i], j - 2);
+                Acci(0, j + p_num) = -j * (j - 1) * pow(time[i], j - 2);
+                if(i == 0)
+                {
+                    Acci(0, j) = j * (j - 1) * pow(time[i], j - 2);
+                    Acci(0, j + p_num) = 0;
+                }
+                if(i == wp_num - 1)
+                {
+                    Acci(0, j) = 0;
+                    Acci(0, j + p_num) = j * (j - 1) * pow(time[i], j - 2);
+                }
+            }
+        }
+        if(i == 0)
+        {
+            // Veli.block(0, p_num, 1, p_num) = Eigen::MatrixXd::Zero(1, p_num);
+            // Acci.block(0, p_num, 1, p_num) = Eigen::MatrixXd::Zero(1, p_num);
+            Aeq.block(2 * seg_num, 0, 1, 2 * p_num) = Veli;
+            Aeq.block(2 * seg_num + 1, 0, 1, 2 * p_num) = Acci;
+            lowerBound_x[2 * seg_num] = 0;
+            upperBound_x[2 * seg_num] = 0;
+            lowerBound_x[2 * seg_num + 1] = 0;
+            upperBound_x[2 * seg_num + 1] = 0;
+            lowerBound_y[2 * seg_num] = 0;
+            upperBound_y[2 * seg_num] = 0;
+            lowerBound_y[2 * seg_num + 1] = 0;
+            upperBound_y[2 * seg_num + 1] = 0;
+            // lowerBound_z[2 * seg_num] = 0;
+            // upperBound_z[2 * seg_num] = 0;
+            // lowerBound_z[2 * seg_num + 1] = 0;
+            // upperBound_z[2 * seg_num + 1] = 0;
+        }
+        else if(i == wp_num - 1)
+        {
+            // Veli.block(0, 0, 1, p_num) = Eigen::MatrixXd::Zero(1, p_num);
+            // Acci.block(0, 0, 1, p_num) = Eigen::MatrixXd::Zero(1, p_num);
+            Aeq.block(m - 2, p_num * (seg_num - 2), 1, 2 * p_num) = Veli;
+            Aeq.block(m - 1, p_num * (seg_num - 2), 1, 2 * p_num) = Acci;
+            lowerBound_x[m - 2] = 0;
+            upperBound_x[m - 2] = 0;
+            lowerBound_x[m - 1] = 0;
+            upperBound_x[m - 1] = 0;
+            lowerBound_y[m - 2] = 0;
+            upperBound_y[m - 2] = 0;
+            lowerBound_y[m - 1] = 0;
+            upperBound_y[m - 1] = 0;
+            // lowerBound_z[m - 2] = 0;
+            // upperBound_z[m - 2] = 0;
+            // lowerBound_z[m - 1] = 0;
+            // upperBound_z[m - 1] = 0;
+        }
+        else
+        {
+            Aeq.block(2 * i + 2 * seg_num, p_num * (i - 1), 1, 2 * p_num) = Veli;
+            Aeq.block(2 * i + 2 * seg_num + 1, p_num * (i - 1), 1, 2 * p_num) = Acci;
+            lowerBound_x[2 * i + 2 * seg_num] = 0;
+            upperBound_x[2 * i + 2 * seg_num] = 0;
+            lowerBound_x[2 * i + 2 * seg_num + 1] = 0;
+            upperBound_x[2 * i + 2 * seg_num + 1] = 0;
+            lowerBound_y[2 * i + 2 * seg_num] = 0;
+            upperBound_y[2 * i + 2 * seg_num] = 0;
+            lowerBound_y[2 * i + 2 * seg_num + 1] = 0;
+            upperBound_y[2 * i + 2 * seg_num + 1] = 0;
+            // lowerBound_z[2 * i + 2 * seg_num] = 0;
+            // upperBound_z[2 * i + 2 * seg_num] = 0;
+            // lowerBound_z[2 * i + 2 * seg_num + 1] = 0;
+            // upperBound_z[2 * i + 2 * seg_num + 1] = 0;
+        }
+    }
     // std::cout << Aeq << std::endl;
     linearMatrix = Aeq.sparseView();
     std::cout << linearMatrix << std::endl;
-    std::cout << lowerBound_x << std::endl;
+    // std::cout << lowerBound_x << std::endl;
 
     // instantiate the solver
     OsqpEigen::Solver solver;
@@ -250,10 +356,10 @@ void min_snap::uniform_time_arrange(Eigen::MatrixXd path_)
         time[i + 1] = time[i] + dist[i] / total_dist * total_time;
         
     }
-    // for(int i = 0; i < point_num; i++)
-    // {
-    //     std::cout << "time: " << time[i] << std::endl;
-    // }
+    for(int i = 0; i < point_num; i++)
+    {
+        std::cout << "time: " << time[i] << std::endl;
+    }
 }
 
 int min_snap::solveQP(Eigen::MatrixXd Hessian)
